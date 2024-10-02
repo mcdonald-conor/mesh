@@ -1,7 +1,7 @@
 //
 //  main.cpp
 //  MESH
-//  Messaging Encrpytion for Secure Hosts
+//  Messaging Encryption for Secure Hosts
 //
 //  Created by Conor McDonald on 30/09/2024.
 //
@@ -9,8 +9,8 @@
 //          include iostream, asio, threading (openssl and wxwidgets later)
 // step 2. listen and connect function
 //          be able to listen for connections and establish a connection, hardcode port: 1994, resolver for ip -> name
-// step 3. introduction for CLI interface
-//
+// step 3. introduction for CLI tool
+//          input for IP and send message
 
 #include <iostream>
 #include <boost/asio.hpp>
@@ -31,23 +31,24 @@ void listen_for_connections(boost::asio::io_context& io_context, tcp::socket& so
 }
 
 //function to initiate a connection to another peer
-void connect_to_peer(boost::asio::io_context& io_context, tcp::socket& socket, const std::string& host, const std::string& port) {
+void connect_to_peer(boost::asio::io_context& io_context, tcp::socket& socket, const std::string& host) {
     try {
         tcp::resolver resolver(io_context);
-        tcp::resolver::results_type endpoints = resolver.resolve(host, port); // Hostname to IP address
+        tcp::resolver::results_type endpoints = resolver.resolve(host, "1994"); // Always using port 1994
         boost::asio::connect(socket, endpoints);
-        std::cout << "Connected to peer at " << host << ":" << port << std::endl;
+        std::cout << "Connected to peer at " << host << ":1994" << std::endl;
     } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << std::endl;
     }
 }
 
+//main messaging functionality
 int main() {
     try {
         boost::asio::io_context io_context;
         tcp::socket socket(io_context);
 
-        // Start the listener in a separate thread so it runs concurrently
+        //start the listener in a separate thread so it runs concurrently
         std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(socket));
 
         std::string connect;
@@ -56,13 +57,11 @@ int main() {
         std::cin >> connect;
 
         if (connect == "yes") {
-            std::string host, port;
+            std::string host;
             std::cout << "Enter peer IP: " << std::endl;
             std::cin >> host;
-            std::cout << "Enter peer port: " << std::endl;
-            std::cin >> port;
             
-            connect_to_peer(io_context, socket, host, port);
+            connect_to_peer(io_context, socket, host);
         }
 
         //wait for the accept thread to complete
@@ -72,7 +71,7 @@ int main() {
         while (true) {
             std::string message;
             std::cout << "Enter message: ";
-            std::cin.ignore();  //std::cin only prints firstword, use getline and ignore newline
+            std::cin.ignore();  //std::cin only prints first word, use getline and ignore newline
             std::getline(std::cin, message);
 
             boost::asio::write(socket, boost::asio::buffer(message));
@@ -87,10 +86,8 @@ int main() {
                 std::cerr << "Error receiving message: " << error.message() << std::endl;
             }
         }
-
     } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << std::endl;
     }
-
     return 0;
 }
