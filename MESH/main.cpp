@@ -51,15 +51,15 @@ int main() {
         std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(socket));
 
         std::string connect;
-        std::cout << "Welcome to M.E.S.H." << std::endl;
-        std::cout << "Do you want to initiate a connection? (yes/no): ";
+        std::cout << "Welcome to M.E.S.H." << std::endl; //endl makes it look more like a system prompt, quicker than \n
+        std::cout << "Do you want to initiate a connection? (yes/no): " << std::endl;
         std::cin >> connect;
 
         if (connect == "yes") {
             std::string host, port;
-            std::cout << "Enter peer IP: ";
+            std::cout << "Enter peer IP: " << std::endl;
             std::cin >> host;
-            std::cout << "Enter peer port: ";
+            std::cout << "Enter peer port: " << std::endl;
             std::cin >> port;
             
             connect_to_peer(io_context, socket, host, port);
