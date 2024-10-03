@@ -8,7 +8,7 @@
 // step 1. include the libraries
 //          include iostream, asio, threading (openssl and wxwidgets later)
 // step 2. listen and connect function
-//          be able to listen for connections and establish a connection, hardcode port: 1994, resolver for ip -> name
+//          be able to listen for connections and establish a connection, user-defined port
 // step 3. introduction for CLI tool
 //          input for IP and send message
 
@@ -18,11 +18,11 @@
 
 using boost::asio::ip::tcp;
 
-//function to listen for connections
-void listen_for_connections(boost::asio::io_context& io_context, tcp::socket& socket) {
+// Function to listen for connections
+void listen_for_connections(boost::asio::io_context& io_context, tcp::socket& socket, unsigned short port) {
     try {
-        tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), 1994)); //hardcoded port
-        std::cout << "Listening for incoming connections on port 1994..." << std::endl;
+        tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), port));
+        std::cout << "Listening for incoming connections on port " << port << "..." << std::endl;
         acceptor.accept(socket);
         std::cout << "Connection accepted from: " << socket.remote_endpoint().address().to_string() << std::endl;
     } catch (std::exception& e) {
@@ -30,48 +30,52 @@ void listen_for_connections(boost::asio::io_context& io_context, tcp::socket& so
     }
 }
 
-//function to initiate a connection to another peer
-void connect_to_peer(boost::asio::io_context& io_context, tcp::socket& socket, const std::string& host) {
+// Function to initiate a connection to another peer
+void connect_to_peer(boost::asio::io_context& io_context, tcp::socket& socket, const std::string& host, unsigned short port) {
     try {
         tcp::resolver resolver(io_context);
-        tcp::resolver::results_type endpoints = resolver.resolve(host, "1994"); // Always using port 1994
+        tcp::resolver::results_type endpoints = resolver.resolve(host, std::to_string(port));
         boost::asio::connect(socket, endpoints);
-        std::cout << "Connected to peer at " << host << ":1994" << std::endl;
+        std::cout << "Connected to peer at " << host << ":" << port << std::endl;
     } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << std::endl;
     }
 }
 
-//main messaging functionality
+// Main messaging functionality
 int main() {
     try {
         boost::asio::io_context io_context;
         tcp::socket socket(io_context);
 
-        //start the listener in a separate thread so it runs concurrently
-        std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(socket));
+        unsigned short port;
+        std::cout << "Welcome to M.E.S.H." << std::endl;
+        std::cout << "Enter port to listen on: ";
+        std::cin >> port;
+
+        // Start the listener in a separate thread so it runs concurrently
+        std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(socket), port);
 
         std::string connect;
-        std::cout << "Welcome to M.E.S.H." << std::endl; //endl makes it look more like a system prompt, quicker than \n
-        std::cout << "Do you want to initiate a connection? (yes/no): " << std::endl;
+        std::cout << "Do you want to initiate a connection? (yes/no): ";
         std::cin >> connect;
 
         if (connect == "yes") {
             std::string host;
-            std::cout << "Enter peer IP: " << std::endl;
+            std::cout << "Enter peer IP: ";
             std::cin >> host;
             
-            connect_to_peer(io_context, socket, host);
+            connect_to_peer(io_context, socket, host, port);
         }
 
-        //wait for the accept thread to complete
+        // Wait for the accept thread to complete
         accept_thread.join();
 
-        //both peers can now send/receive messages
+        // Both peers can now send/receive messages
         while (true) {
             std::string message;
             std::cout << "Enter message: ";
-            std::cin.ignore();  //std::cin only prints first word, use getline and ignore newline
+            std::cin.ignore();  // Ignore the newline character left in the input buffer
             std::getline(std::cin, message);
 
             boost::asio::write(socket, boost::asio::buffer(message));
