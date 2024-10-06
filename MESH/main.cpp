@@ -1,17 +1,3 @@
-//
-//  main.cpp
-//  MESH
-//  Messaging Encryption for Secure Hosts
-//
-//  Created by Conor McDonald on 30/09/2024.
-//
-// step 1. include the libraries
-//          include iostream, asio, threading (openssl and wxwidgets later)
-// step 2. listen and connect function
-//          be able to listen for connections and establish a connection, user-defined port
-// step 3. introduction for CLI tool
-//          input for IP and send message
-
 #include <iostream>
 #include <boost/asio.hpp>
 #include <thread>
@@ -19,14 +5,18 @@
 #include <string>
 #include <limits>
 #include <mutex>
-#include <iomanip>  // Include for std::setw
-#include <chrono>   // Include for timestamp functionality
+#include <iomanip>
+#include <chrono>
+#include <csignal>  // For signal handling
 
 using boost::asio::ip::tcp;
 
 std::mutex cout_mutex;
+std::atomic<bool> running(true);  // Global atomic flag to control the running state
+tcp::socket* socketPtr = nullptr; // Global pointer for socket to clean up on exit
+boost::asio::io_context* io_context_ptr = nullptr; // Global pointer for io_context
 
-const int USERNAME_WIDTH = 15; // Fixed width for username
+const int USERNAME_WIDTH = 15;
 
 // Function to get current timestamp
 std::string get_timestamp() {
@@ -35,6 +25,30 @@ std::string get_timestamp() {
     std::stringstream ss;
     ss << std::put_time(std::localtime(&in_time_t), "[%Y-%m-%d %X] ");
     return ss.str();
+}
+
+// Signal handler for Ctrl + C
+void signalHandler(int signum) {
+    std::cout << "\nReceived interrupt signal (" << signum << "). Exiting chat..." << std::endl;
+    running = false; // Set running to false to stop threads
+    if (socketPtr && socketPtr->is_open()) {
+        std::cout << "Closing connection..." << std::endl;
+        boost::system::error_code ec;
+        socketPtr->shutdown(tcp::socket::shutdown_both, ec);
+        if (ec) {
+            std::cerr << "Error shutting down connection: " << ec.message() << std::endl;
+        }
+        socketPtr->close(ec);
+        if (ec) {
+            std::cerr << "Error closing connection: " << ec.message() << std::endl;
+        } else {
+            std::cout << "Connection closed successfully." << std::endl;
+        }
+    }
+    if (io_context_ptr) {
+        io_context_ptr->stop(); // Stop the io_context
+    }
+    std::cout << "Cleaning up resources..." << std::endl;
 }
 
 // Function to listen for connections
@@ -61,7 +75,6 @@ void connect_to_peer(boost::asio::io_context& io_context, tcp::socket& socket, c
     }
 }
 
-// Function to handle receiving messages
 void receive_messages(tcp::socket& socket, std::atomic<bool>& running, const std::string& username) {
     try {
         while (running) {
@@ -69,31 +82,38 @@ void receive_messages(tcp::socket& socket, std::atomic<bool>& running, const std
             boost::system::error_code error;
             size_t length = boost::asio::read_until(socket, buffer, '\n', error);
 
-            if (!error) {
-                std::string message(boost::asio::buffers_begin(buffer.data()), boost::asio::buffers_begin(buffer.data()) + length);
-                buffer.consume(length);
-
-                // Trim leading and trailing whitespace
-                message.erase(0, message.find_first_not_of(" \t\n\r\f\v"));
-                message.erase(message.find_last_not_of(" \t\n\r\f\v") + 1);
-
-                if (!message.empty()) {
-                    std::lock_guard<std::mutex> lock(cout_mutex);
-                    // Print a new line to ensure received message starts on a new line
-                    std::cout << std::endl;
-
-                    // Print the received message
-                    std::cout << message << std::endl;
-                    std::cout.flush();
-                }
-
-                // Prompt for the next message with the receiver's username and timestamp
-                std::cout << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << "Message: ";
-                std::cout.flush();
-            } else {
-                std::cerr << "Error receiving message: " << error.message() << std::endl;
+            if (error == boost::asio::error::eof) {
+                std::cout << "Connection closed by peer." << std::endl;
                 running = false;
                 break;
+            } else if (error) {
+                throw boost::system::system_error(error);
+            }
+
+            std::string message(boost::asio::buffers_begin(buffer.data()), boost::asio::buffers_begin(buffer.data()) + length);
+            buffer.consume(length);
+
+            message.erase(0, message.find_first_not_of(" \t\n\r\f\v"));
+            message.erase(message.find_last_not_of(" \t\n\r\f\v") + 1);
+
+            if (!message.empty()) {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << std::endl;
+                std::cout << message << std::endl;
+                std::cout.flush();
+
+                // Check if the message indicates that the chat has ended
+                if (message.find("Chat ended") != std::string::npos) {
+                    std::cout << "The other peer has ended the chat. Closing connection..." << std::endl;
+                    running = false;
+                    break;
+                }
+            }
+
+            if (running) {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << "Message: ";
+                std::cout.flush();
             }
         }
     } catch (std::exception& e) {
@@ -113,21 +133,34 @@ void send_messages(tcp::socket& socket, std::atomic<bool>& running, const std::s
             }
             std::getline(std::cin, message);
 
-            if (message == "exit") {
+            if (message == "exit" || !running) {
                 running = false;
-                break;
+                // Send a special message indicating the chat has ended
+                std::ostringstream oss;
+                oss << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << "Message: " << "Chat ended\n";
+                std::string end_message = oss.str();
+                boost::system::error_code ec;
+                boost::asio::write(socket, boost::asio::buffer(end_message), ec);
+                if (ec) {
+                    std::cerr << "Error sending end message: " << ec.message() << std::endl;
+                }
+                break; // Break out of the loop to close the connection
             }
 
-            // Trim leading and trailing whitespace
             message.erase(0, message.find_first_not_of(" \t\n\r\f\v"));
             message.erase(message.find_last_not_of(" \t\n\r\f\v") + 1);
 
             if (socket.is_open() && !message.empty()) {
                 std::ostringstream oss;
-                // Add the "Message: " prefix to the message before sending
                 oss << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << "Message: " << message << "\n";
                 std::string timestamped_message = oss.str();
-                boost::asio::write(socket, boost::asio::buffer(timestamped_message));
+                boost::system::error_code ec;
+                boost::asio::write(socket, boost::asio::buffer(timestamped_message), ec);
+                if (ec) {
+                    std::cerr << "Error sending message: " << ec.message() << std::endl;
+                    running = false;
+                    break;
+                }
             } else if (!socket.is_open()) {
                 std::cerr << "Connection is closed. Unable to send message." << std::endl;
                 running = false;
@@ -140,64 +173,69 @@ void send_messages(tcp::socket& socket, std::atomic<bool>& running, const std::s
     }
 }
 
-// Main messaging functionality
+unsigned short get_valid_port() {
+    unsigned short port;
+    while (true) {
+        std::cout << "Enter a port number (1024-65535): ";
+        std::cin >> port;
+        if (std::cin.fail() || port < 1024 || port > 65535) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::cout << "Invalid port number. Please try again." << std::endl;
+        } else {
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return port;
+        }
+    }
+}
+
 int main() {
     try {
+        // Register the signal handler for SIGINT (Ctrl + C)
+        signal(SIGINT, signalHandler);
+
         boost::asio::io_context io_context;
+        io_context_ptr = &io_context; // Set the global pointer for io_context
 
         std::string username;
-        std::cout << "Welcome to M.E.S.H." << std::endl;
+        std::cout << "Welcome to M.E.S.H., the secure peer-to-peer messaging app!" << std::endl;
         std::cout << "Enter your username: ";
         std::getline(std::cin, username);
 
-        unsigned short listen_port;
-        std::cout << "Enter port to listen on: ";
-        std::cin >> listen_port;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Clear input buffer
+        int choice;
+        std::cout << "Do you want to:\n1. Wait for a connection from another peer (Listener)\n2. Connect to a peer (Initiator)" << std::endl;
+        std::cout << "Enter your choice (1 or 2): ";
+        std::cin >> choice;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-        // Create two sockets: one for listening, one for connecting
-        tcp::socket listen_socket(io_context);
-        tcp::socket connect_socket(io_context);
-
-        // Start the listener in a separate thread
-        std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(listen_socket), listen_port);
-
-        // Wait a moment to ensure the listening message is displayed
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        std::string connect;
-        std::cout << "Do you want to initiate a connection? (yes/no): ";
-        std::getline(std::cin, connect);
-
-        std::atomic<bool> running(true);
         std::thread receive_thread;
         std::thread send_thread;
 
-        if (connect == "yes") {
-            std::string host;
-            std::cout << "Enter peer IP: ";
-            std::getline(std::cin, host);
+        tcp::socket socket(io_context);
+        socketPtr = &socket; // Set the global pointer for socket
 
-            unsigned short connect_port;
-            std::cout << "Enter peer port: ";
-            std::cin >> connect_port;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Clear input buffer
-
-            connect_to_peer(io_context, connect_socket, host, connect_port);
-
-            // Start send and receive threads for the connection we initiated
-            receive_thread = std::thread(receive_messages, std::ref(connect_socket), std::ref(running), std::ref(username));
-            send_thread = std::thread(send_messages, std::ref(connect_socket), std::ref(running), std::ref(username));
-        } else {
-            // Wait for the accept thread to complete
+        if (choice == 1) {
+            std::cout << "You've chosen to wait for a connection." << std::endl;
+            unsigned short listen_port = get_valid_port();
+            std::thread accept_thread(listen_for_connections, std::ref(io_context), std::ref(socket), listen_port);
             accept_thread.join();
-
-            // Start send and receive threads for the accepted connection
-            receive_thread = std::thread(receive_messages, std::ref(listen_socket), std::ref(running), std::ref(username));
-            send_thread = std::thread(send_messages, std::ref(listen_socket), std::ref(running), std::ref(username));
+        } else if (choice == 2) {
+            std::string host;
+            std::cout << "You've chosen to connect to a peer." << std::endl;
+            std::cout << "Enter peer IP (or 'localhost' if testing locally): ";
+            std::getline(std::cin, host);
+            unsigned short connect_port = get_valid_port();
+            connect_to_peer(io_context, socket, host, connect_port);
+        } else {
+            std::cerr << "Invalid choice, please restart the program." << std::endl;
+            return 1;
         }
 
-        // Wait for the threads to complete
+        receive_thread = std::thread(receive_messages, std::ref(socket), std::ref(running), std::ref(username));
+        send_thread = std::thread(send_messages, std::ref(socket), std::ref(running), std::ref(username));
+
+        io_context.run(); // Run the io_context in the main thread
+
         if (receive_thread.joinable()) {
             receive_thread.join();
         }
@@ -205,13 +243,19 @@ int main() {
             send_thread.join();
         }
 
-        // Clean up
-        if (connect_socket.is_open()) {
-            connect_socket.close();
+        if (socket.is_open()) {
+            boost::system::error_code ec;
+            socket.shutdown(tcp::socket::shutdown_both, ec);
+            if (ec) {
+                std::cerr << "Error shutting down socket: " << ec.message() << std::endl;
+            }
+            socket.close(ec);
+            if (ec) {
+                std::cerr << "Error closing socket: " << ec.message() << std::endl;
+            }
         }
-        if (listen_socket.is_open()) {
-            listen_socket.close();
-        }
+
+        std::cout << "Chat session ended. Goodbye!" << std::endl;
 
     } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << std::endl;
