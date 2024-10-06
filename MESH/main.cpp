@@ -73,10 +73,19 @@ void receive_messages(tcp::socket& socket, std::atomic<bool>& running, const std
                 std::string message(boost::asio::buffers_begin(buffer.data()), boost::asio::buffers_begin(buffer.data()) + length);
                 buffer.consume(length);
 
-                std::lock_guard<std::mutex> lock(cout_mutex);
-                // Print the received message on a new line
-                std::cout << "\n" << message;
-                std::cout.flush();
+                // Trim leading and trailing whitespace
+                message.erase(0, message.find_first_not_of(" \t\n\r\f\v"));
+                message.erase(message.find_last_not_of(" \t\n\r\f\v") + 1);
+
+                if (!message.empty()) {
+                    std::lock_guard<std::mutex> lock(cout_mutex);
+                    // Print a new line to ensure received message starts on a new line
+                    std::cout << std::endl;
+
+                    // Print the received message
+                    std::cout << message << std::endl;
+                    std::cout.flush();
+                }
 
                 // Prompt for the next message with the receiver's username and timestamp
                 std::cout << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << "Message: ";
