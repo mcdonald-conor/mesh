@@ -6,19 +6,36 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AC57BD062CB32F5C00258CA9 /* server.key in CopyFiles */ = {isa = PBXBuildFile; fileRef = AC57BD022CB32F5C00258CA9 /* server.key */; };
+		AC57BD072CB32F5C00258CA9 /* dh2048.pem in CopyFiles */ = {isa = PBXBuildFile; fileRef = AC57BD032CB32F5C00258CA9 /* dh2048.pem */; };
+		AC57BD082CB32F5C00258CA9 /* server.crt in CopyFiles */ = {isa = PBXBuildFile; fileRef = AC57BD042CB32F5C00258CA9 /* server.crt */; };
+		AC57BD092CB32F5C00258CA9 /* ca.crt in CopyFiles */ = {isa = PBXBuildFile; fileRef = AC57BD052CB32F5C00258CA9 /* ca.crt */; };
+		AC57BD0C2CB3309B00258CA9 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AC57BD0B2CB3309B00258CA9 /* CoreFoundation.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		AC6E25722CAAA83900A66C3B /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
+			dstPath = usr/share/man/man1;
+			dstSubfolderSpec = 7;
 			files = (
+				AC57BD062CB32F5C00258CA9 /* server.key in CopyFiles */,
+				AC57BD072CB32F5C00258CA9 /* dh2048.pem in CopyFiles */,
+				AC57BD082CB32F5C00258CA9 /* server.crt in CopyFiles */,
+				AC57BD092CB32F5C00258CA9 /* ca.crt in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AC57BD022CB32F5C00258CA9 /* server.key */ = {isa = PBXFileReference; lastKnownFileType = text; name = server.key; path = certs/server.key; sourceTree = "<group>"; };
+		AC57BD032CB32F5C00258CA9 /* dh2048.pem */ = {isa = PBXFileReference; lastKnownFileType = text; name = dh2048.pem; path = certs/dh2048.pem; sourceTree = "<group>"; };
+		AC57BD042CB32F5C00258CA9 /* server.crt */ = {isa = PBXFileReference; lastKnownFileType = text; name = server.crt; path = certs/server.crt; sourceTree = "<group>"; };
+		AC57BD052CB32F5C00258CA9 /* ca.crt */ = {isa = PBXFileReference; lastKnownFileType = text; name = ca.crt; path = certs/ca.crt; sourceTree = "<group>"; };
+		AC57BD0B2CB3309B00258CA9 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		AC6E25742CAAA83900A66C3B /* MESH */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MESH; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -35,16 +52,30 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC57BD0C2CB3309B00258CA9 /* CoreFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AC57BD0A2CB3309B00258CA9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				AC57BD0B2CB3309B00258CA9 /* CoreFoundation.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		AC6E256B2CAAA83900A66C3B = {
 			isa = PBXGroup;
 			children = (
+				AC57BD052CB32F5C00258CA9 /* ca.crt */,
+				AC57BD032CB32F5C00258CA9 /* dh2048.pem */,
+				AC57BD042CB32F5C00258CA9 /* server.crt */,
+				AC57BD022CB32F5C00258CA9 /* server.key */,
 				AC6E25762CAAA83900A66C3B /* MESH */,
+				AC57BD0A2CB3309B00258CA9 /* Frameworks */,
 				AC6E25752CAAA83900A66C3B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -249,11 +280,13 @@
 					"/opt/homebrew/opt/openssl@3.3/include",
 					/opt/homebrew/opt/boost/include,
 					/usr/local/include,
+					/opt/homebrew/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					/usr/local/lib,
 					/opt/homebrew/opt/boost/lib,
 					"/opt/homebrew/opt/openssl@3.3/lib",
+					/opt/homebrew/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lwx_osx_cocoau_html-3.2",
@@ -283,11 +316,13 @@
 					"/opt/homebrew/opt/openssl@3.3/include",
 					/opt/homebrew/opt/boost/include,
 					/usr/local/include,
+					/opt/homebrew/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					/usr/local/lib,
 					/opt/homebrew/opt/boost/lib,
 					"/opt/homebrew/opt/openssl@3.3/lib",
+					/opt/homebrew/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lwx_osx_cocoau_html-3.2",
