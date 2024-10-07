@@ -20,6 +20,7 @@ ssl::stream<tcp::socket>* ssl_socket_ptr = nullptr;
 boost::asio::io_context* io_context_ptr = nullptr;
 
 const int USERNAME_WIDTH = 15;
+std::string username;
 
 // Function to get resource path for certificates
 std::string get_resource_path(const std::string& filename) {
@@ -165,7 +166,7 @@ void receive_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& r
             buffer.consume(length);
 
             std::lock_guard<std::mutex> lock(cout_mutex);
-            std::cout << "\nReceived: " << message;
+            std::cout << message;
         }
     } catch (std::exception& e) {
         std::cerr << "Exception in receive_messages: " << e.what() << std::endl;
@@ -179,14 +180,19 @@ void send_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& runn
         while (running) {
             std::string message;
             std::getline(std::cin, message);
-            message += '\n';
 
-            if (message == "exit\n") {
+            if (message == "exit") {
                 running = false;
                 break;
             }
 
-            boost::asio::write(ssl_socket, boost::asio::buffer(message));
+            std::stringstream formatted_message;
+            formatted_message << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << ": " << message << '\n';
+
+            boost::asio::write(ssl_socket, boost::asio::buffer(formatted_message.str()));
+
+            std::lock_guard<std::mutex> lock(cout_mutex);
+            std::cout << formatted_message.str();
         }
     } catch (std::exception& e) {
         std::cerr << "Exception in send_messages: " << e.what() << std::endl;
@@ -203,6 +209,9 @@ int main() {
         io_context_ptr = &io_context;
 
         std::cout << "Welcome to Secure MESH Chat!" << std::endl;
+        std::cout << "Please enter your username: ";
+        std::getline(std::cin, username);
+
         std::cout << "Do you want to:\n1. Wait for a connection\n2. Connect to a peer" << std::endl;
         int choice;
         std::cin >> choice;
