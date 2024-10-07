@@ -10,6 +10,9 @@
 #include <chrono>
 #include <csignal>
 #include <CoreFoundation/CoreFoundation.h>
+#include <queue>
+#include <condition_variable>
+
 
 using boost::asio::ip::tcp;
 namespace ssl = boost::asio::ssl;
@@ -145,36 +148,6 @@ void connect_to_peer(boost::asio::io_context& io_context, ssl::context& ssl_ctx,
     }
 }
 
-// Receive messages function
-void receive_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& running) {
-    try {
-        while (running) {
-            boost::asio::streambuf buffer;
-            boost::system::error_code error;
-            size_t length = boost::asio::read_until(ssl_socket, buffer, '\n', error);
-
-            if (error == boost::asio::error::eof) {
-                std::cout << "Connection closed by peer." << std::endl;
-                running = false;
-                break;
-            } else if (error) {
-                throw boost::system::system_error(error);
-            }
-
-            std::string message(boost::asio::buffers_begin(buffer.data()),
-                              boost::asio::buffers_begin(buffer.data()) + length);
-            buffer.consume(length);
-
-            std::lock_guard<std::mutex> lock(cout_mutex);
-            std::cout << message;
-        }
-    } catch (std::exception& e) {
-        std::cerr << "Exception in receive_messages: " << e.what() << std::endl;
-        running = false;
-    }
-}
-
-// Send messages function
 void send_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& running) {
     try {
         while (running) {
@@ -186,19 +159,61 @@ void send_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& runn
                 break;
             }
 
+            // Clear the raw input from terminal (move cursor up and clear line)
+            std::cout << "\033[A\033[2K";
+
+            // Format the message with timestamp and username
             std::stringstream formatted_message;
             formatted_message << get_timestamp() << std::setw(USERNAME_WIDTH) << std::left << username << ": " << message << '\n';
 
+            // Send the formatted message to the peer
             boost::asio::write(ssl_socket, boost::asio::buffer(formatted_message.str()));
 
-            std::lock_guard<std::mutex> lock(cout_mutex);
-            std::cout << formatted_message.str();
+            // Display the formatted message in the sender's terminal
+            {
+                std::lock_guard<std::mutex> lock(cout_mutex);
+                std::cout << formatted_message.str();
+            }
         }
     } catch (std::exception& e) {
         std::cerr << "Exception in send_messages: " << e.what() << std::endl;
         running = false;
     }
 }
+
+
+void receive_messages(ssl::stream<tcp::socket>& ssl_socket, std::atomic<bool>& running) {
+    try {
+        while (running) {
+            boost::asio::streambuf buffer;
+            boost::system::error_code error;
+
+            // Receive a message from the peer
+            size_t length = boost::asio::read_until(ssl_socket, buffer, '\n', error);
+
+            if (error == boost::asio::error::eof) {
+                std::cout << "Connection closed by peer." << std::endl;
+                running = false;
+                break;
+            } else if (error) {
+                throw boost::system::system_error(error);
+            }
+
+            // Convert buffer to string and print it
+            std::string message(boost::asio::buffers_begin(buffer.data()),
+                                boost::asio::buffers_begin(buffer.data()) + length);
+            buffer.consume(length);
+
+            std::lock_guard<std::mutex> lock(cout_mutex);
+            std::cout << message;
+        }
+    } catch (std::exception& e) {
+        std::cerr << "Exception in receive_messages: " << e.what() << std::endl;
+        running = false;
+    }
+}
+
+
 
 int main() {
     try {
